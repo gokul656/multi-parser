@@ -16,17 +16,17 @@ func main() {
 	metadata := &models.AdapterMetadata{
 		Filename: filedetails.Path,
 		Limit:    1,
-		Offset:   1,
+		Offset:   0,
 		Columns:  []string{"User Id", "Requested By"},
 		SortRules: []models.SortRule{
 			{
-				Column: "User Id",
+				Column: "Requested By",
 				Order:  models.Descending,
 			},
 		},
 	}
 
 	adapter := csv.NewAdapter(&filedetails)
-	chunks, _ := adapter.ReadChunked(metadata)
+	chunks, _ := adapter.Read(metadata)
 	log.Println(string(chunks))
 }

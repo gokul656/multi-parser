@@ -8,7 +8,7 @@ import (
 	"os"
 )
 
-func (a *CSVAdapter) open(filePath string, columns []string, chunkSize *int, offset *int) ([][]string, error) {
+func (a *CSVAdapter) open(filePath string, columns []string) ([][]string, error) {
 	log.Printf("opening file: %v\n", filePath)
 
 	// Open the file
@@ -36,23 +36,13 @@ func (a *CSVAdapter) open(filePath string, columns []string, chunkSize *int, off
 		columnIndices[i] = index
 	}
 
-	// Data collection
+	// Collect all rows
 	data := [][]string{}
-	data = append(data, columns)
-
-	if chunkSize == nil {
-		return a.read(data, columnIndices, *reader)
-	}
-
-	return a.readChunked(*chunkSize, data, columnIndices, *reader, *offset)
-}
-
-func (a *CSVAdapter) read(data [][]string, columnIndices []int, reader csv.Reader) ([][]string, error) {
+	data = append(data, columns) // Include header
 
 	for {
 		record, err := reader.Read()
 		if err == io.EOF {
-			// Process the remaining chunk
 			break
 		}
 		if err != nil {
@@ -64,60 +54,28 @@ func (a *CSVAdapter) read(data [][]string, columnIndices []int, reader csv.Reade
 			line = append(line, record[i])
 		}
 
-		// Add record to the chunk
 		data = append(data, line)
 	}
 
 	return data, nil
 }
 
-func (a *CSVAdapter) readChunked(chunkSize int, data [][]string, columnIndices []int, reader csv.Reader, offset int) ([][]string, error) {
-	if chunkSize <= 0 {
-		return nil, fmt.Errorf("chunkSize must be greater than 0")
+func (a *CSVAdapter) applyLimitAndOffset(data [][]string, limit, offset int) [][]string {
+	// If Offset is beyond data length, return only the header row
+	if offset >= len(data)-1 { // Exclude the header row from offset check
+		return data[:1]
 	}
 
-	skippedRows := 0
+	start := offset + 1 // Offset is 0-based; skip the header row
 
-	// Skip rows based on the offset
-	for skippedRows < offset {
-		_, err := reader.Read()
-		if err == io.EOF {
-			// If EOF is reached before the offset, return current data
-			return data, nil
-		}
-		if err != nil {
-			return nil, fmt.Errorf("error skipping rows: %v", err)
-		}
-		skippedRows++
+	// Calculate the end index based on Limit
+	end := len(data)
+	if limit > 0 && start+limit < len(data) {
+		end = start + limit
 	}
 
-	rowCount := 0
-
-	for {
-		record, err := reader.Read()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			return nil, fmt.Errorf("error reading file: %v", err)
-		}
-
-		// Add the record to the result set
-		line := make([]string, 0)
-		for _, i := range columnIndices {
-			line = append(line, record[i])
-		}
-
-		data = append(data, line)
-		rowCount++
-
-		// Stop reading after reaching chunk size
-		if rowCount >= chunkSize {
-			break
-		}
-	}
-
-	return data, nil
+	// Include header row and apply offset/limit
+	return append(data[:1], data[start:end]...)
 }
 
 func (a *CSVAdapter) indexOf(columnName string, headers []string) int {
